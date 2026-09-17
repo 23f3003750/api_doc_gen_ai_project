@@ -1,20 +1,26 @@
 openapi: 3.0.3
 info:
-  title: AI Home Manager- API's
+  title: AI Home Manager - API Documentation
   description: >
-    REST API for the AI Home Manager backend (Flask + SQLAlchemy + LangGraph).
-    Covers authentication, the six data domains (People & Permissions, Tasks &
-    Schedule, Food & Inventory, Finance & Budgeting, Home & Maintenance,
-    Documents), and the conversational agent endpoint that routes natural
-    language requests through the multi-agent orchestrator.
+    REST API specification for the AI Home Manager backend covering
+    Authentication & Permissions, Household Tasks, and the Shared Calendar.
   version: 1.0.0
   contact:
     name: Vibe Crew
 
-
 servers:
   - url: http://localhost:5000
     description: Local development server
+
+tags:
+  - name: System & Health
+    description: System monitoring and health diagnostics
+  - name: Authentication & Permissions
+    description: Household setup, authentication, invites, and RBAC lifecycle management
+  - name: Tasks
+    description: Household task creation, status updates, and assignment queries
+  - name: Calendar
+    description: Shared household calendar appointments and conflict detection
 
 components:
   securitySchemes:
@@ -23,13 +29,32 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >
-        Provide the JWT access token obtained during registration or login.
-        Contains user identity and household role (Admin, Adult, Child, Guest).
+        Provide the JWT access token obtained via register or login.
+        Payload includes user identity and household role (Admin, Adult, Child, Guest).
 
   schemas:
     HouseholdRole:
       type: string
-      enum: [Admin, Adult, Child, Guest]
+      enum:
+        - Admin
+        - Adult
+        - Child
+        - Guest
+
+    TaskPriority:
+      type: string
+      enum:
+        - Low
+        - Normal
+        - High
+
+    TaskStatus:
+      type: string
+      enum:
+        - Open
+        - InProgress
+        - Done
+        - Cancelled
 
     ErrorResponse:
       type: object
@@ -54,11 +79,62 @@ components:
         role:
           $ref: '#/components/schemas/HouseholdRole'
 
+    Task:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: "Clean living room windows"
+        description:
+          type: string
+          nullable: true
+          example: "Wipe interior and exterior glass panels"
+        assigned_to:
+          type: string
+          format: uuid
+          nullable: true
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-09-22T18:00:00Z"
+        priority:
+          $ref: '#/components/schemas/TaskPriority'
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+
+    CalendarEvent:
+      type: object
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          example: "Dentist Appointment"
+        starts_at:
+          type: string
+          format: date-time
+          example: "2026-09-25T10:00:00Z"
+        ends_at:
+          type: string
+          format: date-time
+          example: "2026-09-25T11:30:00Z"
+        owner_id:
+          type: string
+          format: uuid
+          nullable: true
+
 paths:
   /health:
     get:
+      tags:
+        - System & Health
       summary: Service Health Check
-      description: Returns operational status of the service.
+      description: Returns operational status of the backend service.
       responses:
         '200':
           description: Healthy service status
@@ -76,10 +152,10 @@ paths:
 
   /api/auth/register-household:
     post:
+      tags:
+        - Authentication & Permissions
       summary: Register Household Founder (US-1.1)
-      description: >
-        Registers the first user who is automatically designated as the household Admin.
-        Fails if an active household has already been initialized.
+      description: Registers the first user who is automatically designated as the household Admin.
       requestBody:
         required: true
         content:
@@ -94,21 +170,21 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: admin@home.test
+                  example: "admin@home.test"
                 password:
                   type: string
                   format: password
-                  example: password123
+                  example: "password123"
                 display_name:
                   type: string
-                  example: Ravi Admin
+                  example: "Ravi Admin"
                 date_of_birth:
                   type: string
                   format: date
                   example: "1985-04-12"
       responses:
         '201':
-          description: Household successfully created and Admin assigned.
+          description: Household created successfully and Admin role assigned.
           content:
             application/json:
               schema:
@@ -116,14 +192,13 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Household created
+                    example: "Household created"
                   token:
                     type: string
-                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
                   user:
                     $ref: '#/components/schemas/UserResponse'
         '400':
-          description: Validation error or household already initialized.
+          description: Household already initialized or invalid payload.
           content:
             application/json:
               schema:
@@ -131,8 +206,10 @@ paths:
 
   /api/auth/login:
     post:
+      tags:
+        - Authentication & Permissions
       summary: Member Authentication
-      description: Validates member credentials and issues a role-scoped JWT token.
+      description: Validates credentials and returns a signed bearer JWT.
       requestBody:
         required: true
         content:
@@ -146,14 +223,14 @@ paths:
                 email:
                   type: string
                   format: email
-                  example: admin@home.test
+                  example: "admin@home.test"
                 password:
                   type: string
                   format: password
-                  example: password123
+                  example: "password123"
       responses:
         '200':
-          description: Authenticated successfully.
+          description: Authentication successful.
           content:
             application/json:
               schema:
@@ -161,7 +238,6 @@ paths:
                 properties:
                   token:
                     type: string
-                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
                   user:
                     $ref: '#/components/schemas/UserResponse'
         '401':
@@ -179,13 +255,15 @@ paths:
 
   /api/auth/invite:
     post:
+      tags:
+        - Authentication & Permissions
       summary: Generate Household Invite (US-1.2)
-      description: Allows Admins to generate an invitation token for prospective members.
+      description: Generates a cryptographically secure invite token (Admin only).
       security:
         - BearerAuth: []
       responses:
         '201':
-          description: Secure invite code generated.
+          description: Invite code generated.
           content:
             application/json:
               schema:
@@ -193,7 +271,7 @@ paths:
                 properties:
                   invite_code:
                     type: string
-                    example: xK9_dF4w29A_qL...
+                    example: "xK9_dF4w29A_qL"
         '403':
           description: Forbidden - Caller lacks Admin role.
           content:
@@ -203,8 +281,10 @@ paths:
 
   /api/auth/join:
     post:
+      tags:
+        - Authentication & Permissions
       summary: Join Household via Invite Code (US-1.2)
-      description: Prospective member registers with an invite code into a Pending state.
+      description: Registers an account using an invite code in a pending status.
       requestBody:
         required: true
         content:
@@ -219,25 +299,25 @@ paths:
               properties:
                 invite_code:
                   type: string
-                  example: xK9_dF4w29A_qL...
+                  example: "xK9_dF4w29A_qL"
                 email:
                   type: string
                   format: email
-                  example: priya@home.test
+                  example: "priya@home.test"
                 password:
                   type: string
                   format: password
-                  example: memberpassword123
+                  example: "memberpassword123"
                 display_name:
                   type: string
-                  example: Priya Sharma
+                  example: "Priya Sharma"
                 date_of_birth:
                   type: string
                   format: date
                   example: "1990-08-22"
       responses:
         '201':
-          description: Registration recorded; awaiting admin approval.
+          description: Registration received; pending admin review.
           content:
             application/json:
               schema:
@@ -245,12 +325,12 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Registration successful. Awaiting Admin approval.
+                    example: "Registration successful. Awaiting Admin approval."
                   user_id:
                     type: string
                     format: uuid
         '400':
-          description: Invalid or expired invite code, or duplicate email.
+          description: Expired or invalid invite code.
           content:
             application/json:
               schema:
@@ -258,13 +338,15 @@ paths:
 
   /api/auth/members/pending:
     get:
+      tags:
+        - Authentication & Permissions
       summary: List Pending Applications (US-1.3)
-      description: Allows an Admin to view prospective members awaiting admission.
+      description: Allows Admins to inspect pending member requests.
       security:
         - BearerAuth: []
       responses:
         '200':
-          description: List of pending member profiles.
+          description: List of pending members.
           content:
             application/json:
               schema:
@@ -285,7 +367,7 @@ paths:
                       format: date
                       nullable: true
         '403':
-          description: Forbidden - Admin permission required.
+          description: Forbidden - Caller is not an Admin.
           content:
             application/json:
               schema:
@@ -293,8 +375,10 @@ paths:
 
   /api/auth/members/{user_id}/approve:
     post:
+      tags:
+        - Authentication & Permissions
       summary: Approve Member and Assign Role (US-1.3)
-      description: Admin assigns a permanent household role to activate a pending member.
+      description: Admin assigns a permanent role (Adult, Child, Guest) to activate a member.
       security:
         - BearerAuth: []
       parameters:
@@ -325,15 +409,15 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: User approved as Adult
+                    example: "User approved as Adult"
         '400':
-          description: Invalid role specified or member not in pending state.
+          description: Invalid role specified or user not pending.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden - Admin role required.
+          description: Forbidden - Admin permission required.
           content:
             application/json:
               schema:
@@ -341,8 +425,10 @@ paths:
 
   /api/auth/members/{user_id}/role:
     put:
+      tags:
+        - Authentication & Permissions
       summary: Modify Member Role (US-1.4)
-      description: Admin updates an existing active member's role; prevents demoting the last Admin.
+      description: Update an active member's role; prevents demoting the last Admin.
       security:
         - BearerAuth: []
       parameters:
@@ -365,7 +451,7 @@ paths:
                   $ref: '#/components/schemas/HouseholdRole'
       responses:
         '200':
-          description: Role modified successfully.
+          description: Role updated successfully.
           content:
             application/json:
               schema:
@@ -373,15 +459,15 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Role updated successfully
+                    example: "Role updated successfully"
         '400':
-          description: Invalid role or illegal demotion of sole Admin.
+          description: Cannot demote sole household Admin.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden - Admin role required.
+          description: Forbidden - Admin permission required.
           content:
             application/json:
               schema:
@@ -389,8 +475,10 @@ paths:
 
   /api/auth/transfer-admin:
     post:
+      tags:
+        - Authentication & Permissions
       summary: Transfer Household Administration (US-1.5)
-      description: Current Admin reassigns admin responsibility to another Adult member.
+      description: Transfers primary Admin rights to another active Adult member.
       security:
         - BearerAuth: []
       requestBody:
@@ -407,7 +495,7 @@ paths:
                   format: uuid
       responses:
         '200':
-          description: Admin privileges transferred successfully.
+          description: Administration transferred.
           content:
             application/json:
               schema:
@@ -415,15 +503,265 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: Admin privileges transferred successfully
+                    example: "Admin privileges transferred successfully"
         '400':
-          description: Successor is not an active Adult member.
+          description: Target member is not an active Adult.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Forbidden - Caller is not the household Admin.
+          description: Forbidden - Caller is not an Admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/tasks:
+    get:
+      tags:
+        - Tasks
+      summary: List Household Tasks (US-2.3)
+      description: Retrieve household tasks filtered by assignee or status.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: assigned_to
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Member UUID or 'me' for the caller's assigned tasks.
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TaskStatus'
+      responses:
+        '200':
+          description: Filtered list of tasks.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '401':
+          description: Unauthorized token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Tasks
+      summary: Create Household Task Manually (US-2.2)
+      description: Manually creates a task. Blocked for Guest accounts.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                  example: "Clean living room windows"
+                description:
+                  type: string
+                  example: "Wipe interior and exterior glass panels"
+                assigned_to:
+                  type: string
+                  format: uuid
+                  nullable: true
+                due_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-22T18:00:00Z"
+                priority:
+                  $ref: '#/components/schemas/TaskPriority'
+      responses:
+        '201':
+          description: Task created successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                    format: uuid
+                  title:
+                    type: string
+                  status:
+                    $ref: '#/components/schemas/TaskStatus'
+        '400':
+          description: Missing title or invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Guest role cannot write tasks.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/tasks/{task_id}/status:
+    patch:
+      tags:
+        - Tasks
+      summary: Update Task Status
+      description: Updates the lifecycle state of a task. Blocked for Guest accounts.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  $ref: '#/components/schemas/TaskStatus'
+      responses:
+        '200':
+          description: Task status updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                    format: uuid
+                  status:
+                    $ref: '#/components/schemas/TaskStatus'
+        '400':
+          description: Invalid status specified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Guest role cannot modify tasks.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Task ID not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/calendar:
+    get:
+      tags:
+        - Calendar
+      summary: List Shared Calendar Events (US-2.5)
+      description: View scheduled household events.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: range_start
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: range_end
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: List of scheduled calendar events.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CalendarEvent'
+        '401':
+          description: Unauthorized token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Calendar
+      summary: Create Calendar Event with Conflict Detection (US-2.6)
+      description: Create a calendar appointment with automatic overlap detection. Blocked for Guest accounts.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - starts_at
+                - ends_at
+              properties:
+                title:
+                  type: string
+                  example: "Family Doctor Visit"
+                starts_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-25T10:00:00Z"
+                ends_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-25T11:30:00Z"
+      responses:
+        '201':
+          description: Event created. Returns detected conflicts if time overlap exists.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event:
+                    $ref: '#/components/schemas/CalendarEvent'
+                  conflicts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CalendarEvent'
+                  has_conflict:
+                    type: boolean
+                    example: false
+        '400':
+          description: Bad request (ends_at occurs before starts_at).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - Guest role cannot write events.
           content:
             application/json:
               schema:
