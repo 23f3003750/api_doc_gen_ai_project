@@ -56,6 +56,13 @@ components:
         - Done
         - Cancelled
 
+    OccurrenceStatus:
+      type: string
+      enum:
+        - Pending
+        - Purchased
+        - Skipped
+        
     ErrorResponse:
       type: object
       required:
@@ -127,6 +134,79 @@ components:
           type: string
           format: uuid
           nullable: true
+    
+    InventoryItem:
+      type: object
+      properties:
+        item_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Whole Milk"
+        quantity:
+          type: number
+          example: 2.0
+        unit:
+          type: string
+          nullable: true
+          example: "liters"
+        low_stock_threshold:
+          type: number
+          nullable: true
+          example: 1.0
+
+    GroceryItem:
+      type: object
+      properties:
+        grocery_item_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Eggs"
+        quantity:
+          type: number
+          nullable: true
+          example: 12.0
+        unit:
+          type: string
+          nullable: true
+          example: "pcs"
+        purchased:
+          type: boolean
+          example: false
+        added_by:
+          type: string
+          format: uuid
+
+    CommodityRule:
+      type: object
+      properties:
+        rule_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Bread"
+        schedule:
+          type: string
+          example: "DAILY"
+        quantity:
+          type: number
+          example: 1.0
+        unit:
+          type: string
+          nullable: true
+          example: "loaf"
+        preferred_brand:
+          type: string
+          nullable: true
+          example: "Harvest Gold"
+        low_stock_threshold:
+          type: number
+          nullable: true
+          example: 1.0
 
 paths:
   /health:
@@ -766,3 +846,324 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  
+  /api/inventory:
+    get:
+      tags:
+        - "Food & Inventory"
+      summary: "Get Full Household Inventory Stock"
+      description: "Returns all inventory stock items in the household."
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "List of inventory items."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryItem"
+        "401":
+          description: "Unauthorized."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags:
+        - "Food & Inventory"
+      summary: "Add or Update Inventory Stock"
+      description: "Create a stock item or update quantity. Allowed for Adult and Admin only."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - quantity
+              properties:
+                name:
+                  type: string
+                  example: "Whole Milk"
+                quantity:
+                  type: number
+                  example: 2.0
+                unit:
+                  type: string
+                  example: "liters"
+                low_stock_threshold:
+                  type: number
+                  example: 1.0
+      responses:
+        "201":
+          description: "Inventory item saved."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+        "400":
+          description: "Invalid request parameters."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Requires Adult or Admin role."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory/low-stock:
+    get:
+      tags:
+        - "Food & Inventory"
+      summary: "Get Low-Stock Items (US-3.1)"
+      description: "Returns items where quantity is below or equal to low_stock_threshold."
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "List of items running low on stock."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryItem"
+        "401":
+          description: "Unauthorized."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory/groceries:
+    get:
+      tags:
+        - "Food & Inventory"
+      summary: "Get Grocery Shopping List (US-3.4)"
+      description: "Retrieve items on the household grocery list. Supports include_purchased query filter."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: include_purchased
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: "When true, completed purchases are included in the results."
+      responses:
+        "200":
+          description: "Active grocery shopping list."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GroceryItem"
+        "401":
+          description: "Unauthorized."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags:
+        - "Food & Inventory"
+      summary: "Add Item to Grocery List"
+      description: "Add an item to buy (Children, Adults, and Admins allowed; Guests blocked)."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Eggs"
+                quantity:
+                  type: number
+                  example: 12.0
+                unit:
+                  type: string
+                  example: "pcs"
+      responses:
+        "201":
+          description: "Item added to list."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroceryItem"
+        "400":
+          description: "Missing item name."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guest role cannot write items."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory/groceries/{grocery_item_id}/purchase:
+    patch:
+      tags:
+        - "Food & Inventory"
+      summary: "Toggle Item Purchased State (US-3.4)"
+      description: "Check off or restore an item on the shopping list. Blocked for Guest accounts."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: grocery_item_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                purchased:
+                  type: boolean
+                  default: true
+      responses:
+        "200":
+          description: "Grocery purchase status updated."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroceryItem"
+        "403":
+          description: "Forbidden - Guest role cannot write items."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Grocery item not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory/commodities:
+    post:
+      tags:
+        - "Food & Inventory"
+      summary: "Define Recurring Commodity Rule (US-3.5)"
+      description: "Creates a rule for recurring daily essentials like milk and bread."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Bread"
+                schedule:
+                  type: string
+                  example: "DAILY"
+                quantity:
+                  type: number
+                  example: 1.0
+                unit:
+                  type: string
+                  example: "loaf"
+                preferred_brand:
+                  type: string
+                  example: "Harvest Gold"
+                low_stock_threshold:
+                  type: number
+                  example: 1.0
+      responses:
+        "201":
+          description: "Commodity rule created."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommodityRule"
+        "400":
+          description: "Missing required fields."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guest role cannot write items."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory/commodities/{occurrence_id}/mark-purchased:
+    post:
+      tags:
+        - "Food & Inventory"
+      summary: "Mark Daily Commodity Purchased and Restock (US-3.6)"
+      description: "Marks recurring occurrence fulfilled and updates inventory levels. Blocked for Guests."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: occurrence_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Commodity fulfilled and inventory stock updated."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  occurrence_id:
+                    type: string
+                    format: uuid
+                  status:
+                    $ref: "#/components/schemas/OccurrenceStatus"
+                  inventory_restocked:
+                    type: string
+                    nullable: true
+                  new_inventory_quantity:
+                    type: number
+                    nullable: true
+        "403":
+          description: "Forbidden - Guest role cannot write items."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Occurrence not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
