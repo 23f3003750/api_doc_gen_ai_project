@@ -1,26 +1,28 @@
 openapi: 3.0.3
 info:
-  title: AI Home Manager - API Documentation
-  description: >
-    REST API specification for the AI Home Manager backend covering
-    Authentication & Permissions, Household Tasks, and the Shared Calendar.
-  version: 1.0.0
+  title: "AI Home Manager - API Documentation"
+  description: "REST API specification for the AI Home Manager backend covering Authentication, Tasks, Calendar, Food & Inventory, and Finance & Budgeting."
+  version: "1.3.1"
   contact:
-    name: Vibe Crew
+    name: "Vibe Crew"
 
 servers:
-  - url: http://localhost:5000
-    description: Local development server
+  - url: "http://localhost:5000"
+    description: "Local development server"
 
 tags:
-  - name: System & Health
-    description: System monitoring and health diagnostics
-  - name: Authentication & Permissions
-    description: Household setup, authentication, invites, and RBAC lifecycle management
-  - name: Tasks
-    description: Household task creation, status updates, and assignment queries
-  - name: Calendar
-    description: Shared household calendar appointments and conflict detection
+  - name: "System & Health"
+    description: "System monitoring and health diagnostics"
+  - name: "Authentication & Permissions"
+    description: "Household setup, authentication, invites, and RBAC lifecycle management (US-1.1 to US-1.5)"
+  - name: "Tasks"
+    description: "Household task creation, status updates, and assignment queries (US-2.2, US-2.3)"
+  - name: "Calendar"
+    description: "Shared household calendar appointments and conflict detection (US-2.5, US-2.6)"
+  - name: "Food & Inventory"
+    description: "Inventory levels, low-stock tracking, grocery lists, and daily commodities (US-3.1, US-3.4 to US-3.6)"
+  - name: "Finance & Budgeting"
+    description: "Household expenses, category budgets, and recurring bill tracking (US-4.2 to US-4.4)"
 
 components:
   securitySchemes:
@@ -28,9 +30,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: >
-        Provide the JWT access token obtained via register or login.
-        Payload includes user identity and household role (Admin, Adult, Child, Guest).
+      description: "Provide the JWT access token obtained via register or login. Payload includes user identity and role (Admin, Adult, Child, Guest)."
 
   schemas:
     HouseholdRole:
@@ -62,7 +62,14 @@ components:
         - Pending
         - Purchased
         - Skipped
-        
+
+    BudgetPeriod:
+      type: string
+      enum:
+        - Monthly
+        - Weekly
+        - Custom
+
     ErrorResponse:
       type: object
       required:
@@ -84,7 +91,7 @@ components:
         name:
           type: string
         role:
-          $ref: '#/components/schemas/HouseholdRole'
+          $ref: "#/components/schemas/HouseholdRole"
 
     Task:
       type: object
@@ -109,9 +116,9 @@ components:
           nullable: true
           example: "2026-09-22T18:00:00Z"
         priority:
-          $ref: '#/components/schemas/TaskPriority'
+          $ref: "#/components/schemas/TaskPriority"
         status:
-          $ref: '#/components/schemas/TaskStatus'
+          $ref: "#/components/schemas/TaskStatus"
 
     CalendarEvent:
       type: object
@@ -134,7 +141,7 @@ components:
           type: string
           format: uuid
           nullable: true
-    
+
     InventoryItem:
       type: object
       properties:
@@ -180,6 +187,19 @@ components:
           type: string
           format: uuid
 
+    PurchaseOccurrenceSummary:
+      type: object
+      properties:
+        occurrence_id:
+          type: string
+          format: uuid
+        occurrence_date:
+          type: string
+          format: date
+          example: "2026-09-21"
+        status:
+          $ref: "#/components/schemas/OccurrenceStatus"
+
     CommodityRule:
       type: object
       properties:
@@ -208,16 +228,161 @@ components:
           nullable: true
           example: 1.0
 
+    CommodityCreateResponse:
+      type: object
+      properties:
+        rule_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Milk"
+        schedule:
+          type: string
+          example: "DAILY"
+        quantity:
+          type: number
+          example: 1.0
+        unit:
+          type: string
+          nullable: true
+          example: "litre"
+        preferred_brand:
+          type: string
+          nullable: true
+          example: "Amul"
+        low_stock_threshold:
+          type: number
+          nullable: true
+          example: 2.0
+        today_occurrence:
+          $ref: "#/components/schemas/PurchaseOccurrenceSummary"
+
+    Expense:
+      type: object
+      properties:
+        expense_id:
+          type: string
+          format: uuid
+        amount_minor:
+          type: integer
+          example: 4500
+        currency:
+          type: string
+          example: "USD"
+        category:
+          type: string
+          example: "Groceries"
+        description:
+          type: string
+          nullable: true
+          example: "Weekly supermarket run"
+        occurred_at:
+          type: string
+          format: date-time
+          example: "2026-09-18T12:00:00Z"
+        recorded_by:
+          type: string
+          format: uuid
+          nullable: true
+        document_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    Budget:
+      type: object
+      properties:
+        budget_id:
+          type: string
+          format: uuid
+        category:
+          type: string
+          example: "Groceries"
+        limit_minor:
+          type: integer
+          example: 50000
+        currency:
+          type: string
+          example: "USD"
+        period:
+          $ref: "#/components/schemas/BudgetPeriod"
+        period_start:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-09-01"
+        period_end:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-09-30"
+
+    BudgetStatus:
+      type: object
+      properties:
+        category:
+          type: string
+          example: "Groceries"
+        month:
+          type: integer
+          example: 9
+        year:
+          type: integer
+          example: 2026
+        limit_minor:
+          type: integer
+          example: 50000
+        spent_minor:
+          type: integer
+          example: 12000
+        remaining_minor:
+          type: integer
+          example: 38000
+        has_budget:
+          type: boolean
+          example: true
+        is_exceeded:
+          type: boolean
+          example: false
+
+    RecurringBill:
+      type: object
+      properties:
+        bill_id:
+          type: string
+          format: uuid
+        payee:
+          type: string
+          example: "City Electric"
+        expected_amount_minor:
+          type: integer
+          example: 8000
+        currency:
+          type: string
+          example: "USD"
+        category:
+          type: string
+          nullable: true
+          example: "Utilities"
+        due_at:
+          type: string
+          format: date-time
+          example: "2026-09-24T18:00:00Z"
+        recurrence:
+          type: string
+          example: "MONTHLY"
+
 paths:
   /health:
     get:
       tags:
-        - System & Health
-      summary: Service Health Check
-      description: Returns operational status of the backend service.
+        - "System & Health"
+      summary: "Service Health Check"
+      description: "Returns operational status of the backend service."
       responses:
-        '200':
-          description: Healthy service status
+        "200":
+          description: "Healthy service status"
           content:
             application/json:
               schema:
@@ -225,17 +390,17 @@ paths:
                 properties:
                   status:
                     type: string
-                    example: healthy
+                    example: "healthy"
                   service:
                     type: string
-                    example: ai-home-manager
+                    example: "ai-home-manager"
 
   /api/auth/register-household:
     post:
       tags:
-        - Authentication & Permissions
-      summary: Register Household Founder (US-1.1)
-      description: Registers the first user who is automatically designated as the household Admin.
+        - "Authentication & Permissions"
+      summary: "Register Household Founder (US-1.1)"
+      description: "Registers the first user who is auto-assigned the Admin role."
       requestBody:
         required: true
         content:
@@ -263,8 +428,8 @@ paths:
                   format: date
                   example: "1985-04-12"
       responses:
-        '201':
-          description: Household created successfully and Admin role assigned.
+        "201":
+          description: "Household created successfully and Admin role assigned."
           content:
             application/json:
               schema:
@@ -276,20 +441,20 @@ paths:
                   token:
                     type: string
                   user:
-                    $ref: '#/components/schemas/UserResponse'
-        '400':
-          description: Household already initialized or invalid payload.
+                    $ref: "#/components/schemas/UserResponse"
+        "400":
+          description: "Household already initialized or invalid payload."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/login:
     post:
       tags:
-        - Authentication & Permissions
-      summary: Member Authentication
-      description: Validates credentials and returns a signed bearer JWT.
+        - "Authentication & Permissions"
+      summary: "Member Authentication"
+      description: "Validates credentials and returns a signed bearer JWT."
       requestBody:
         required: true
         content:
@@ -309,8 +474,8 @@ paths:
                   format: password
                   example: "password123"
       responses:
-        '200':
-          description: Authentication successful.
+        "200":
+          description: "Authentication successful."
           content:
             application/json:
               schema:
@@ -319,31 +484,31 @@ paths:
                   token:
                     type: string
                   user:
-                    $ref: '#/components/schemas/UserResponse'
-        '401':
-          description: Invalid email or password.
+                    $ref: "#/components/schemas/UserResponse"
+        "401":
+          description: "Invalid email or password."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Membership pending approval.
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Membership pending approval."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/invite:
     post:
       tags:
-        - Authentication & Permissions
-      summary: Generate Household Invite (US-1.2)
-      description: Generates a cryptographically secure invite token (Admin only).
+        - "Authentication & Permissions"
+      summary: "Generate Household Invite (US-1.2)"
+      description: "Generates a cryptographically secure invite token (Admin only)."
       security:
         - BearerAuth: []
       responses:
-        '201':
-          description: Invite code generated.
+        "201":
+          description: "Invite code generated."
           content:
             application/json:
               schema:
@@ -352,19 +517,19 @@ paths:
                   invite_code:
                     type: string
                     example: "xK9_dF4w29A_qL"
-        '403':
-          description: Forbidden - Caller lacks Admin role.
+        "403":
+          description: "Forbidden - Caller lacks Admin role."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/join:
     post:
       tags:
-        - Authentication & Permissions
-      summary: Join Household via Invite Code (US-1.2)
-      description: Registers an account using an invite code in a pending status.
+        - "Authentication & Permissions"
+      summary: "Join Household via Invite Code (US-1.2)"
+      description: "Registers an account using an invite code in a pending status."
       requestBody:
         required: true
         content:
@@ -396,8 +561,8 @@ paths:
                   format: date
                   example: "1990-08-22"
       responses:
-        '201':
-          description: Registration received; pending admin review.
+        "201":
+          description: "Registration received; pending admin review."
           content:
             application/json:
               schema:
@@ -409,24 +574,24 @@ paths:
                   user_id:
                     type: string
                     format: uuid
-        '400':
-          description: Expired or invalid invite code.
+        "400":
+          description: "Expired or invalid invite code."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/members/pending:
     get:
       tags:
-        - Authentication & Permissions
-      summary: List Pending Applications (US-1.3)
-      description: Allows Admins to inspect pending member requests.
+        - "Authentication & Permissions"
+      summary: "List Pending Applications (US-1.3)"
+      description: "Allows Admins to inspect pending member requests."
       security:
         - BearerAuth: []
       responses:
-        '200':
-          description: List of pending members.
+        "200":
+          description: "List of pending members."
           content:
             application/json:
               schema:
@@ -446,19 +611,19 @@ paths:
                       type: string
                       format: date
                       nullable: true
-        '403':
-          description: Forbidden - Caller is not an Admin.
+        "403":
+          description: "Forbidden - Caller is not an Admin."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/members/{user_id}/approve:
     post:
       tags:
-        - Authentication & Permissions
-      summary: Approve Member and Assign Role (US-1.3)
-      description: Admin assigns a permanent role (Adult, Child, Guest) to activate a member.
+        - "Authentication & Permissions"
+      summary: "Approve Member and Assign Role (US-1.3)"
+      description: "Admin assigns a permanent role to activate a member."
       security:
         - BearerAuth: []
       parameters:
@@ -478,10 +643,10 @@ paths:
                 - role
               properties:
                 role:
-                  $ref: '#/components/schemas/HouseholdRole'
+                  $ref: "#/components/schemas/HouseholdRole"
       responses:
-        '200':
-          description: Member successfully activated.
+        "200":
+          description: "Member successfully activated."
           content:
             application/json:
               schema:
@@ -490,25 +655,25 @@ paths:
                   message:
                     type: string
                     example: "User approved as Adult"
-        '400':
-          description: Invalid role specified or user not pending.
+        "400":
+          description: "Invalid role specified or user not pending."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden - Admin permission required.
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Admin permission required."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/members/{user_id}/role:
     put:
       tags:
-        - Authentication & Permissions
-      summary: Modify Member Role (US-1.4)
-      description: Update an active member's role; prevents demoting the last Admin.
+        - "Authentication & Permissions"
+      summary: "Modify Member Role (US-1.4)"
+      description: "Update an active member's role; prevents demoting the last Admin."
       security:
         - BearerAuth: []
       parameters:
@@ -528,10 +693,10 @@ paths:
                 - role
               properties:
                 role:
-                  $ref: '#/components/schemas/HouseholdRole'
+                  $ref: "#/components/schemas/HouseholdRole"
       responses:
-        '200':
-          description: Role updated successfully.
+        "200":
+          description: "Role updated successfully."
           content:
             application/json:
               schema:
@@ -540,25 +705,25 @@ paths:
                   message:
                     type: string
                     example: "Role updated successfully"
-        '400':
-          description: Cannot demote sole household Admin.
+        "400":
+          description: "Cannot demote sole household Admin."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden - Admin permission required.
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Admin permission required."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/auth/transfer-admin:
     post:
       tags:
-        - Authentication & Permissions
-      summary: Transfer Household Administration (US-1.5)
-      description: Transfers primary Admin rights to another active Adult member.
+        - "Authentication & Permissions"
+      summary: "Transfer Household Administration (US-1.5)"
+      description: "Transfers primary Admin rights to another active Adult member."
       security:
         - BearerAuth: []
       requestBody:
@@ -574,8 +739,8 @@ paths:
                   type: string
                   format: uuid
       responses:
-        '200':
-          description: Administration transferred.
+        "200":
+          description: "Administration transferred."
           content:
             application/json:
               schema:
@@ -584,25 +749,25 @@ paths:
                   message:
                     type: string
                     example: "Admin privileges transferred successfully"
-        '400':
-          description: Target member is not an active Adult.
+        "400":
+          description: "Target member is not an active Adult."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden - Caller is not an Admin.
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Caller is not an Admin."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/tasks:
     get:
       tags:
-        - Tasks
-      summary: List Household Tasks (US-2.3)
-      description: Retrieve household tasks filtered by assignee or status.
+        - "Tasks"
+      summary: "List Household Tasks (US-2.3)"
+      description: "Retrieve household tasks filtered by assignee or status."
       security:
         - BearerAuth: []
       parameters:
@@ -611,33 +776,33 @@ paths:
           required: false
           schema:
             type: string
-          description: Member UUID or 'me' for the caller's assigned tasks.
+          description: "Member UUID or 'me' for caller assigned tasks."
         - name: status
           in: query
           required: false
           schema:
-            $ref: '#/components/schemas/TaskStatus'
+            $ref: "#/components/schemas/TaskStatus"
       responses:
-        '200':
-          description: Filtered list of tasks.
+        "200":
+          description: "Filtered list of tasks."
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Task'
-        '401':
-          description: Unauthorized token.
+                  $ref: "#/components/schemas/Task"
+        "401":
+          description: "Unauthorized token."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
     post:
       tags:
-        - Tasks
-      summary: Create Household Task Manually (US-2.2)
-      description: Manually creates a task. Blocked for Guest accounts.
+        - "Tasks"
+      summary: "Create Household Task Manually (US-2.2)"
+      description: "Manually creates a task. Blocked for Guest accounts."
       security:
         - BearerAuth: []
       requestBody:
@@ -664,10 +829,10 @@ paths:
                   format: date-time
                   example: "2026-09-22T18:00:00Z"
                 priority:
-                  $ref: '#/components/schemas/TaskPriority'
+                  $ref: "#/components/schemas/TaskPriority"
       responses:
-        '201':
-          description: Task created successfully.
+        "201":
+          description: "Task created successfully."
           content:
             application/json:
               schema:
@@ -679,26 +844,26 @@ paths:
                   title:
                     type: string
                   status:
-                    $ref: '#/components/schemas/TaskStatus'
-        '400':
-          description: Missing title or invalid parameters.
+                    $ref: "#/components/schemas/TaskStatus"
+        "400":
+          description: "Missing title or invalid parameters."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden - Guest role cannot write tasks.
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guest role cannot write tasks."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/tasks/{task_id}/status:
     patch:
       tags:
-        - Tasks
-      summary: Update Task Status
-      description: Updates the lifecycle state of a task. Blocked for Guest accounts.
+        - "Tasks"
+      summary: "Update Task Status"
+      description: "Updates the lifecycle state of a task. Blocked for Guest accounts."
       security:
         - BearerAuth: []
       parameters:
@@ -718,10 +883,10 @@ paths:
                 - status
               properties:
                 status:
-                  $ref: '#/components/schemas/TaskStatus'
+                  $ref: "#/components/schemas/TaskStatus"
       responses:
-        '200':
-          description: Task status updated.
+        "200":
+          description: "Task status updated."
           content:
             application/json:
               schema:
@@ -731,32 +896,32 @@ paths:
                     type: string
                     format: uuid
                   status:
-                    $ref: '#/components/schemas/TaskStatus'
-        '400':
-          description: Invalid status specified.
+                    $ref: "#/components/schemas/TaskStatus"
+        "400":
+          description: "Invalid status specified."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden - Guest role cannot modify tasks.
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guest role cannot modify tasks."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: Task ID not found.
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Task ID not found."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/calendar:
     get:
       tags:
-        - Calendar
-      summary: List Shared Calendar Events (US-2.5)
-      description: View scheduled household events.
+        - "Calendar"
+      summary: "List Shared Calendar Events (US-2.5)"
+      description: "View scheduled household events."
       security:
         - BearerAuth: []
       parameters:
@@ -773,26 +938,26 @@ paths:
             type: string
             format: date-time
       responses:
-        '200':
-          description: List of scheduled calendar events.
+        "200":
+          description: "List of scheduled calendar events."
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CalendarEvent'
-        '401':
-          description: Unauthorized token.
+                  $ref: "#/components/schemas/CalendarEvent"
+        "401":
+          description: "Unauthorized token."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
     post:
       tags:
-        - Calendar
-      summary: Create Calendar Event with Conflict Detection (US-2.6)
-      description: Create a calendar appointment with automatic overlap detection. Blocked for Guest accounts.
+        - "Calendar"
+      summary: "Create Calendar Event with Conflict Detection (US-2.6)"
+      description: "Create a calendar appointment with automatic overlap detection. Blocked for Guest accounts."
       security:
         - BearerAuth: []
       requestBody:
@@ -818,35 +983,35 @@ paths:
                   format: date-time
                   example: "2026-09-25T11:30:00Z"
       responses:
-        '201':
-          description: Event created. Returns detected conflicts if time overlap exists.
+        "201":
+          description: "Event created. Returns detected conflicts if time overlap exists."
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   event:
-                    $ref: '#/components/schemas/CalendarEvent'
+                    $ref: "#/components/schemas/CalendarEvent"
                   conflicts:
                     type: array
                     items:
-                      $ref: '#/components/schemas/CalendarEvent'
+                      $ref: "#/components/schemas/CalendarEvent"
                   has_conflict:
                     type: boolean
                     example: false
-        '400':
-          description: Bad request (ends_at occurs before starts_at).
+        "400":
+          description: "Bad request (ends_at occurs before starts_at)."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Forbidden - Guest role cannot write events.
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guest role cannot write events."
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/inventory:
     get:
       tags:
@@ -896,9 +1061,11 @@ paths:
                   example: 2.0
                 unit:
                   type: string
+                  nullable: true
                   example: "liters"
                 low_stock_threshold:
                   type: number
+                  nullable: true
                   example: 1.0
       responses:
         "201":
@@ -1071,7 +1238,7 @@ paths:
       tags:
         - "Food & Inventory"
       summary: "Define Recurring Commodity Rule (US-3.5)"
-      description: "Creates a rule for recurring daily essentials like milk and bread."
+      description: "Creates a rule for recurring daily essentials like milk and bread, generating today's occurrence."
       security:
         - BearerAuth: []
       requestBody:
@@ -1085,29 +1252,31 @@ paths:
               properties:
                 name:
                   type: string
-                  example: "Bread"
+                  example: "Milk"
                 schedule:
                   type: string
+                  default: "DAILY"
                   example: "DAILY"
                 quantity:
                   type: number
+                  default: 1.0
                   example: 1.0
                 unit:
                   type: string
-                  example: "loaf"
+                  example: "litre"
                 preferred_brand:
                   type: string
-                  example: "Harvest Gold"
+                  example: "Amul"
                 low_stock_threshold:
                   type: number
-                  example: 1.0
+                  example: 2.0
       responses:
         "201":
-          description: "Commodity rule created."
+          description: "Commodity rule created and today's occurrence generated."
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CommodityRule"
+                $ref: "#/components/schemas/CommodityCreateResponse"
         "400":
           description: "Missing required fields."
           content:
@@ -1163,6 +1332,326 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: "Occurrence not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/finance/expenses:
+    get:
+      tags:
+        - "Finance & Budgeting"
+      summary: "List Logged Expenses (US-4.4)"
+      description: "Retrieve logged expenses with optional category and month/year filters (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: "List of household expenses."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Expense"
+        "401":
+          description: "Unauthorized."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Child and Guest accounts blocked."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Log an Expense Entry Manually (US-4.4)"
+      description: "Log an out-of-pocket expense in integer minor units (cents) (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amount_minor
+                - category
+              properties:
+                amount_minor:
+                  type: integer
+                  example: 4500
+                category:
+                  type: string
+                  example: "Groceries"
+                description:
+                  type: string
+                  example: "Weekly supermarket run"
+                occurred_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-18T12:00:00Z"
+                currency:
+                  type: string
+                  default: "USD"
+                  example: "USD"
+                document_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "201":
+          description: "Expense logged successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+        "400":
+          description: "Invalid request payload."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Child and Guest accounts blocked."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/finance/budgets:
+    post:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Set Monthly Category Budget (US-4.2)"
+      description: "Set or modify a category budget cap for a specific month (Admin only)."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - category
+                - month
+                - year
+                - limit_minor
+              properties:
+                category:
+                  type: string
+                  example: "Groceries"
+                month:
+                  type: integer
+                  example: 9
+                year:
+                  type: integer
+                  example: 2026
+                limit_minor:
+                  type: integer
+                  example: 50000
+                currency:
+                  type: string
+                  default: "USD"
+                  example: "USD"
+      responses:
+        "201":
+          description: "Budget set successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Budget"
+        "400":
+          description: "Invalid request payload."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Admin permission required."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/finance/budgets/status:
+    get:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Check Category Budget Status (US-4.2)"
+      description: "Query budget spent and remaining balance for a category and month (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: category
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "Groceries"
+        - name: month
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 9
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: integer
+            example: 2026
+      responses:
+        "200":
+          description: "Current budget status and remaining balance."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudgetStatus"
+        "400":
+          description: "Missing category parameter."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Child and Guest accounts blocked."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/finance/bills:
+    post:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Register Recurring Household Bill (US-4.3)"
+      description: "Register a recurring monthly bill with due date and amount (Admin only)."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - payee
+                - expected_amount_minor
+                - due_at
+              properties:
+                payee:
+                  type: string
+                  example: "City Electric"
+                expected_amount_minor:
+                  type: integer
+                  example: 8000
+                due_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-24T18:00:00Z"
+                category:
+                  type: string
+                  example: "Utilities"
+                recurrence:
+                  type: string
+                  default: "MONTHLY"
+                  example: "MONTHLY"
+                currency:
+                  type: string
+                  default: "USD"
+                  example: "USD"
+      responses:
+        "201":
+          description: "Bill registered successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecurringBill"
+        "400":
+          description: "Invalid request payload."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Admin permission required."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/finance/bills/upcoming:
+    get:
+      tags:
+        - "Finance & Budgeting"
+      summary: "List Upcoming Bills (US-4.3)"
+      description: "Retrieve active recurring bills due within the next N days (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 7
+      responses:
+        "200":
+          description: "List of upcoming bills sorted by due date."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    bill_id:
+                      type: string
+                      format: uuid
+                    payee:
+                      type: string
+                    expected_amount_minor:
+                      type: integer
+                    due_at:
+                      type: string
+                      format: date-time
+                    days_remaining:
+                      type: integer
+                    category:
+                      type: string
+                      nullable: true
+        "401":
+          description: "Unauthorized."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Child and Guest accounts blocked."
           content:
             application/json:
               schema:
