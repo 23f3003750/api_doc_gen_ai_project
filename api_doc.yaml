@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: "AI Home Manager - API Documentation"
   description: "REST API specification for the AI Home Manager backend covering Authentication, Tasks, Calendar, Food & Inventory, and Finance & Budgeting."
-  version: "1.3.1"
+  version: "1.5.0"
   contact:
     name: "Vibe Crew"
 
@@ -16,13 +16,13 @@ tags:
   - name: "Authentication & Permissions"
     description: "Household setup, authentication, invites, and RBAC lifecycle management (US-1.1 to US-1.5)"
   - name: "Tasks"
-    description: "Household task creation, status updates, and assignment queries (US-2.2, US-2.3)"
+    description: "Household task creation, status updates, editing, deletion, and assignment queries (US-2.2, US-2.3)"
   - name: "Calendar"
-    description: "Shared household calendar appointments and conflict detection (US-2.5, US-2.6)"
+    description: "Shared household calendar appointments, conflict detection, updates, and deletion (US-2.5, US-2.6)"
   - name: "Food & Inventory"
-    description: "Inventory levels, low-stock tracking, grocery lists, and daily commodities (US-3.1, US-3.4 to US-3.6)"
+    description: "Inventory levels, low-stock tracking, grocery lists, commodities, updates, and deletion (US-3.1, US-3.4 to US-3.6)"
   - name: "Finance & Budgeting"
-    description: "Household expenses, category budgets, and recurring bill tracking (US-4.2 to US-4.4)"
+    description: "Household expenses, category budgets, and recurring bills CRUD (US-4.2 to US-4.4)"
 
 components:
   securitySchemes:
@@ -78,6 +78,15 @@ components:
         error:
           type: string
           example: "Invalid credentials or unauthorized access"
+
+    SuccessResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: "Resource deleted successfully"
 
     UserResponse:
       type: object
@@ -227,6 +236,9 @@ components:
           type: number
           nullable: true
           example: 1.0
+        active:
+          type: boolean
+          example: true
 
     CommodityCreateResponse:
       type: object
@@ -858,6 +870,106 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/tasks/{task_id}:
+    put:
+      tags:
+        - "Tasks"
+      summary: "Update an Existing Task"
+      description: "Update task fields (title, description, assignee, priority, status). Blocked for Guests."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: "Clean living room windows"
+                description:
+                  type: string
+                  example: "Wipe interior panels and frames"
+                assigned_to:
+                  type: string
+                  format: uuid
+                  nullable: true
+                due_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-23T18:00:00Z"
+                priority:
+                  $ref: "#/components/schemas/TaskPriority"
+                status:
+                  $ref: "#/components/schemas/TaskStatus"
+      responses:
+        "200":
+          description: "Task updated successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: "Invalid input parameters."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guest role cannot edit tasks."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Task not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - "Tasks"
+      summary: "Delete a Task"
+      description: "Delete an existing household task. Blocked for Guest accounts."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Task deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Guest role cannot delete tasks."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Task not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/tasks/{task_id}/status:
     patch:
       tags:
@@ -1012,6 +1124,109 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/calendar/{event_id}:
+    put:
+      tags:
+        - "Calendar"
+      summary: "Update a Calendar Event"
+      description: "Update event details and evaluate conflict overlaps against other events. Blocked for Guests."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  example: "Dentist Follow-up"
+                starts_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-25T14:00:00Z"
+                ends_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-25T15:30:00Z"
+      responses:
+        "200":
+          description: "Calendar event updated."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event:
+                    $ref: "#/components/schemas/CalendarEvent"
+                  conflicts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CalendarEvent"
+                  has_conflict:
+                    type: boolean
+                    example: false
+        "400":
+          description: "Invalid dates or end time occurs before start time."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guest role cannot edit events."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Calendar event not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - "Calendar"
+      summary: "Delete a Calendar Event"
+      description: "Delete an existing scheduled event. Blocked for Guest accounts."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Calendar event deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Guest role cannot delete events."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Calendar event not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/inventory:
     get:
       tags:
@@ -1061,11 +1276,9 @@ paths:
                   example: 2.0
                 unit:
                   type: string
-                  nullable: true
                   example: "liters"
                 low_stock_threshold:
                   type: number
-                  nullable: true
                   example: 1.0
       responses:
         "201":
@@ -1082,6 +1295,100 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: "Forbidden - Requires Adult or Admin role."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory/{item_id}:
+    put:
+      tags:
+        - "Food & Inventory"
+      summary: "Update an Inventory Item"
+      description: "Modifies inventory quantities and threshold (Adult and Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Whole Milk"
+                quantity:
+                  type: number
+                  example: 3.5
+                unit:
+                  type: string
+                  example: "liters"
+                low_stock_threshold:
+                  type: number
+                  example: 1.5
+      responses:
+        "200":
+          description: "Inventory item updated."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InventoryItem"
+        "400":
+          description: "Invalid input."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Adult and Admin only."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Inventory item not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - "Food & Inventory"
+      summary: "Delete an Inventory Item"
+      description: "Deletes an item from household stock (Adult and Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Item deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Requires Adult or Admin role."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Inventory item not found."
           content:
             application/json:
               schema:
@@ -1188,6 +1495,97 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/inventory/groceries/{grocery_item_id}:
+    put:
+      tags:
+        - "Food & Inventory"
+      summary: "Update a Grocery Item"
+      description: "Edits grocery title, quantity, or unit (Children, Adults, and Admins allowed; Guests blocked)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: grocery_item_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Brown Eggs"
+                quantity:
+                  type: number
+                  example: 6.0
+                unit:
+                  type: string
+                  example: "pcs"
+      responses:
+        "200":
+          description: "Grocery item updated."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroceryItem"
+        "400":
+          description: "Invalid input."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guests cannot edit items."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Grocery item not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - "Food & Inventory"
+      summary: "Delete a Grocery List Item"
+      description: "Deletes an item from the grocery shopping list (Children, Adults, and Admins permitted; Guests blocked)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: grocery_item_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Grocery item removed successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Guest role cannot delete items."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Grocery item not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/inventory/groceries/{grocery_item_id}/purchase:
     patch:
       tags:
@@ -1285,6 +1683,109 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: "Forbidden - Guest role cannot write items."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/inventory/commodities/{rule_id}:
+    put:
+      tags:
+        - "Food & Inventory"
+      summary: "Update a Recurring Commodity Rule"
+      description: "Modifies rule details, brand, schedule, or active state (Adult and Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Whole Milk"
+                schedule:
+                  type: string
+                  example: "DAILY"
+                quantity:
+                  type: number
+                  example: 2.0
+                unit:
+                  type: string
+                  example: "litre"
+                preferred_brand:
+                  type: string
+                  example: "Mother Dairy"
+                low_stock_threshold:
+                  type: number
+                  example: 1.0
+                active:
+                  type: boolean
+                  example: true
+      responses:
+        "200":
+          description: "Commodity rule updated."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommodityRule"
+        "400":
+          description: "Invalid input."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Adult and Admin only."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Commodity rule not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - "Food & Inventory"
+      summary: "Delete a Commodity Rule"
+      description: "Deletes a recurring commodity rule and its scheduled occurrences (Adult and Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Commodity rule deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Requires Adult or Admin role."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Commodity rule not found."
           content:
             application/json:
               schema:
@@ -1441,6 +1942,104 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/finance/expenses/{expense_id}:
+    put:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Update an Expense Entry"
+      description: "Modifies expense amount, category, or date (Adult and Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: expense_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount_minor:
+                  type: integer
+                  example: 5200
+                category:
+                  type: string
+                  example: "Groceries"
+                description:
+                  type: string
+                  example: "Supermarket run + extras"
+                occurred_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-18T14:30:00Z"
+                currency:
+                  type: string
+                  example: "USD"
+      responses:
+        "200":
+          description: "Expense updated."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+        "400":
+          description: "Invalid input."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Adult and Admin only."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Expense not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Delete an Expense Entry"
+      description: "Delete an existing household expense (Adult and Admin only; Child and Guest blocked)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: expense_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Expense deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Restricted to Adult and Admin."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Expense not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/finance/budgets:
     post:
       tags:
@@ -1492,6 +2091,41 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: "Forbidden - Admin permission required."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/finance/budgets/{budget_id}:
+    delete:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Delete a Monthly Category Budget"
+      description: "Delete an existing category budget limit (Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: budget_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Budget deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Admin permission required."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Budget not found."
           content:
             application/json:
               schema:
@@ -1599,6 +2233,107 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: "Forbidden - Admin permission required."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/finance/bills/{bill_id}:
+    put:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Update a Recurring Bill"
+      description: "Edits recurring bill details (Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bill_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payee:
+                  type: string
+                  example: "City Electric"
+                expected_amount_minor:
+                  type: integer
+                  example: 8500
+                due_at:
+                  type: string
+                  format: date-time
+                  example: "2026-09-28T18:00:00Z"
+                category:
+                  type: string
+                  example: "Utilities"
+                recurrence:
+                  type: string
+                  example: "MONTHLY"
+                currency:
+                  type: string
+                  example: "USD"
+      responses:
+        "200":
+          description: "Recurring bill updated."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecurringBill"
+        "400":
+          description: "Invalid input."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Admin only."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Recurring bill not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Delete a Recurring Bill"
+      description: "Delete an existing recurring bill (Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bill_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Recurring bill deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Admin permission required."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Recurring bill not found."
           content:
             application/json:
               schema:
