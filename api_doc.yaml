@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: "AI Home Manager - API Documentation"
-  description: "REST API specification for the AI Home Manager backend covering Authentication, Tasks, Calendar, Food & Inventory, and Finance & Budgeting."
-  version: "1.5.0"
+  description: "REST API specification for the AI Home Manager backend covering Authentication, Tasks, Calendar, Food & Inventory, Finance & Budgeting, and Home & Maintenance."
+  version: "1.6.0"
   contact:
     name: "Vibe Crew"
 
@@ -20,9 +20,11 @@ tags:
   - name: "Calendar"
     description: "Shared household calendar appointments, conflict detection, updates, and deletion (US-2.5, US-2.6)"
   - name: "Food & Inventory"
-    description: "Inventory levels, low-stock tracking, grocery lists, commodities, updates, and deletion (US-3.1, US-3.4 to US-3.6)"
+    description: "Inventory levels, low-stock tracking, grocery lists, daily commodities, updates, and deletion (US-3.1, US-3.4 to US-3.6)"
   - name: "Finance & Budgeting"
     description: "Household expenses, category budgets, and recurring bills CRUD (US-4.2 to US-4.4)"
+  - name: "Home & Maintenance"
+    description: "Appliances, warranty expirations, maintenance issues, and repair history (US-5.1 to US-5.3)"
 
 components:
   securitySchemes:
@@ -69,6 +71,14 @@ components:
         - Monthly
         - Weekly
         - Custom
+
+    IssueStatus:
+      type: string
+      enum:
+        - Open
+        - InProgress
+        - Resolved
+        - Closed
 
     ErrorResponse:
       type: object
@@ -384,6 +394,123 @@ components:
         recurrence:
           type: string
           example: "MONTHLY"
+
+    Appliance:
+      type: object
+      properties:
+        appliance_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Dishwasher"
+        brand:
+          type: string
+          nullable: true
+          example: "Bosch"
+        model:
+          type: string
+          nullable: true
+          example: "Series 6"
+        purchased_at:
+          type: string
+          format: date
+          nullable: true
+          example: "2023-05-01"
+        warranty_ends_at:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-10-31"
+
+    ExpiringWarranty:
+      type: object
+      properties:
+        appliance_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Dishwasher"
+        brand:
+          type: string
+          nullable: true
+          example: "Bosch"
+        model:
+          type: string
+          nullable: true
+          example: "Series 6"
+        warranty_ends_at:
+          type: string
+          format: date
+          example: "2026-10-31"
+        days_remaining:
+          type: integer
+          example: 38
+
+    MaintenanceIssue:
+      type: object
+      properties:
+        issue_id:
+          type: string
+          format: uuid
+        description:
+          type: string
+          example: "AC is making a rattling noise"
+        status:
+          $ref: "#/components/schemas/IssueStatus"
+        priority:
+          $ref: "#/components/schemas/TaskPriority"
+        reported_by:
+          type: string
+          format: uuid
+          nullable: true
+        accountable_to:
+          type: string
+          format: uuid
+          nullable: true
+        appliance_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-09-23T10:00:00Z"
+
+    Repair:
+      type: object
+      properties:
+        repair_id:
+          type: string
+          format: uuid
+        appliance_id:
+          type: string
+          format: uuid
+          nullable: true
+        serviced_at:
+          type: string
+          format: date
+          example: "2026-09-20"
+        provider:
+          type: string
+          nullable: true
+          example: "Urban Company"
+        cost_minor:
+          type: integer
+          nullable: true
+          example: 15000
+        currency:
+          type: string
+          example: "USD"
+        notes:
+          type: string
+          nullable: true
+          example: "Replaced filter cartridge and inspected drain pipe"
+        logged_by:
+          type: string
+          format: uuid
+          nullable: true
 
 paths:
   /health:
@@ -1237,19 +1364,13 @@ paths:
         - BearerAuth: []
       responses:
         "200":
-          description: "List of inventory items."
+          description: "List of items"
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: "#/components/schemas/InventoryItem"
-        "401":
-          description: "Unauthorized."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
     post:
       tags:
@@ -1276,9 +1397,11 @@ paths:
                   example: 2.0
                 unit:
                   type: string
+                  nullable: true
                   example: "liters"
                 low_stock_threshold:
                   type: number
+                  nullable: true
                   example: 1.0
       responses:
         "201":
@@ -1943,6 +2066,40 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/finance/expenses/{expense_id}:
+    get:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Get Single Expense"
+      description: "Retrieve a specific expense record by ID (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: expense_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Expense record."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+        "403":
+          description: "Forbidden - Child and Guest accounts blocked."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Expense not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
     put:
       tags:
         - "Finance & Budgeting"
@@ -1980,6 +2137,10 @@ paths:
                 currency:
                   type: string
                   example: "USD"
+                document_id:
+                  type: string
+                  format: uuid
+                  nullable: true
       responses:
         "200":
           description: "Expense updated."
@@ -2041,6 +2202,29 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/finance/budgets:
+    get:
+      tags:
+        - "Finance & Budgeting"
+      summary: "List All Budgets"
+      description: "List all household budgets (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "List of budgets."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Budget"
+        "403":
+          description: "Forbidden - Child and Guest accounts blocked."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
     post:
       tags:
         - "Finance & Budgeting"
@@ -2179,6 +2363,29 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/finance/bills:
+    get:
+      tags:
+        - "Finance & Budgeting"
+      summary: "List Recurring Bills"
+      description: "Retrieve all active recurring bills (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "List of recurring bills."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RecurringBill"
+        "403":
+          description: "Forbidden - Child and Guest accounts blocked."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
     post:
       tags:
         - "Finance & Budgeting"
@@ -2239,6 +2446,40 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /api/finance/bills/{bill_id}:
+    get:
+      tags:
+        - "Finance & Budgeting"
+      summary: "Get Single Recurring Bill"
+      description: "Retrieve a specific recurring bill by ID (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: bill_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Recurring bill."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecurringBill"
+        "403":
+          description: "Forbidden - Child and Guest accounts blocked."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Recurring bill not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
     put:
       tags:
         - "Finance & Budgeting"
@@ -2387,6 +2628,504 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
           description: "Forbidden - Child and Guest accounts blocked."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/maintenance/appliances:
+    get:
+      tags:
+        - "Home & Maintenance"
+      summary: "List Tracked Appliances"
+      description: "Fetch all registered household appliances."
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: "List of appliances."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Appliance"
+        "401":
+          description: "Unauthorized."
+
+    post:
+      tags:
+        - "Home & Maintenance"
+      summary: "Add New Household Appliance (US-5.1)"
+      description: "Registers an appliance with optional warranty tracking (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Dishwasher"
+                brand:
+                  type: string
+                  example: "Bosch"
+                model:
+                  type: string
+                  example: "Series 6"
+                purchased_at:
+                  type: string
+                  format: date
+                  example: "2023-05-01"
+                warranty_ends_at:
+                  type: string
+                  format: date
+                  example: "2026-10-31"
+      responses:
+        "201":
+          description: "Appliance added."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appliance"
+        "400":
+          description: "Missing required fields or invalid date format."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Restricted to Adult and Admin."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/maintenance/appliances/warranties/expiring:
+    get:
+      tags:
+        - "Home & Maintenance"
+      summary: "Check Expiring Warranties (US-5.1)"
+      description: "Fetch appliances whose warranty expires within the given window (default 30 days)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: "List of appliances with upcoming warranty expirations."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExpiringWarranty"
+        "401":
+          description: "Unauthorized."
+
+  /api/maintenance/appliances/{appliance_id}:
+    put:
+      tags:
+        - "Home & Maintenance"
+      summary: "Update Appliance Details"
+      description: "Update brand, model, purchase date, or warranty date (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appliance_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Dishwasher"
+                brand:
+                  type: string
+                  example: "Bosch"
+                model:
+                  type: string
+                  example: "Series 6 SilencePlus"
+                purchased_at:
+                  type: string
+                  format: date
+                  example: "2023-05-01"
+                warranty_ends_at:
+                  type: string
+                  format: date
+                  example: "2026-12-31"
+      responses:
+        "200":
+          description: "Appliance updated."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appliance"
+        "400":
+          description: "Invalid date format."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Adult and Admin only."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Appliance not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - "Home & Maintenance"
+      summary: "Delete an Appliance"
+      description: "Delete an appliance and cascade repair logs (Adult/Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appliance_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Appliance deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Adult and Admin only."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Appliance not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/maintenance/issues:
+    get:
+      tags:
+        - "Home & Maintenance"
+      summary: "List Maintenance Issues (US-5.2)"
+      description: "Retrieve maintenance issues with optional status or appliance filtering."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/IssueStatus"
+        - name: appliance_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "List of issues."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MaintenanceIssue"
+        "401":
+          description: "Unauthorized."
+
+    post:
+      tags:
+        - "Home & Maintenance"
+      summary: "Report Maintenance Issue (US-5.2)"
+      description: "Log a home defect or malfunction (Child, Adult, Admin allowed; Guests blocked)."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - description
+              properties:
+                description:
+                  type: string
+                  example: "AC is making a rattling noise"
+                priority:
+                  $ref: "#/components/schemas/TaskPriority"
+                appliance_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                accountable_to:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "201":
+          description: "Issue logged."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceIssue"
+        "400":
+          description: "Missing description or invalid appliance reference."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guests cannot report issues."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/maintenance/issues/{issue_id}:
+    put:
+      tags:
+        - "Home & Maintenance"
+      summary: "Update Issue Status / Priority"
+      description: "Transition issue status or update accountability (Child, Adult, Admin allowed)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: issue_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                description:
+                  type: string
+                  example: "AC rattling resolved after fan blade cleaning"
+                status:
+                  $ref: "#/components/schemas/IssueStatus"
+                priority:
+                  $ref: "#/components/schemas/TaskPriority"
+                accountable_to:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        "200":
+          description: "Issue updated."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceIssue"
+        "400":
+          description: "Invalid input."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Guests cannot modify issues."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Issue not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - "Home & Maintenance"
+      summary: "Delete a Maintenance Issue"
+      description: "Delete an issue record (Adult and Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: issue_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Issue deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Adult and Admin only."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Issue not found."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/maintenance/repairs:
+    get:
+      tags:
+        - "Home & Maintenance"
+      summary: "List Service Repairs (US-5.3)"
+      description: "Retrieve past service history (Adult and Admin only due to cost visibility)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: appliance_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "List of repairs."
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Repair"
+        "401":
+          description: "Unauthorized."
+        "403":
+          description: "Forbidden - Child and Guest accounts blocked."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags:
+        - "Home & Maintenance"
+      summary: "Log Appliance Repair (US-5.3)"
+      description: "Record a completed repair and provider cost in minor units (Adult and Admin only)."
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - serviced_at
+              properties:
+                serviced_at:
+                  type: string
+                  format: date
+                  example: "2026-09-20"
+                appliance_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+                provider:
+                  type: string
+                  example: "Urban Company"
+                cost_minor:
+                  type: integer
+                  example: 15000
+                currency:
+                  type: string
+                  default: "USD"
+                  example: "USD"
+                notes:
+                  type: string
+                  example: "Replaced filter cartridge and inspected drain pipe"
+      responses:
+        "201":
+          description: "Repair logged."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repair"
+        "400":
+          description: "Missing serviced_at or invalid input."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Forbidden - Restricted to Adult and Admin."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/maintenance/repairs/{repair_id}:
+    delete:
+      tags:
+        - "Home & Maintenance"
+      summary: "Delete a Repair Entry"
+      description: "Delete a repair record (Adult and Admin only)."
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: repair_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: "Repair deleted successfully."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: "Forbidden - Restricted to Adult and Admin."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Repair not found."
           content:
             application/json:
               schema:
